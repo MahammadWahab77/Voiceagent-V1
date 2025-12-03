@@ -1,0 +1,7 @@
+{
+  "name": "Maya - Voice Onboarding",
+  "description": "A conversational voice AI assistant featuring a 3D glassmorphism avatar.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
