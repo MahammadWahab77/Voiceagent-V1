@@ -14,6 +14,20 @@ const requireAuth = async (request, reply) => {
         reply.code(401).send({ error: 'Unauthorized' });
         return;
     }
+
+    // Check if user is in admin_users table
+    const { data: adminEntry, error: adminError } = await supabaseAdmin
+        .from('admin_users')
+        .select('id')
+        .eq('id', user.id)
+        .single();
+
+    if (adminError || !adminEntry) {
+        console.warn(`Unauthorized admin access attempt by ${user.id}`);
+        reply.code(403).send({ error: 'Forbidden: Admin access only' });
+        return;
+    }
+
     request.user = user;
 };
 

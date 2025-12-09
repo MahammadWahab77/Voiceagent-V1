@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Navigate, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-import { LayoutDashboard, FileText, Settings, LogOut, Users } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, LogOut, Users, Globe } from 'lucide-react';
 
 export default function AdminLayout() {
     const [session, setSession] = useState(null);
@@ -51,6 +51,10 @@ export default function AdminLayout() {
                     <Link to="/admin/stages" className="flex items-center space-x-3 px-4 py-3 hover:bg-indigo-700 rounded-lg transition">
                         <Settings className="w-5 h-5" />
                         <span>Stage Config</span>
+                    </Link>
+                    <Link to="/admin/global-config" className="flex items-center space-x-3 px-4 py-3 hover:bg-indigo-700 rounded-lg transition">
+                        <Globe className="w-5 h-5" />
+                        <span>Global Config</span>
                     </Link>
                     <Link to="/admin/documents" className="flex items-center space-x-3 px-4 py-3 hover:bg-indigo-700 rounded-lg transition">
                         <FileText className="w-5 h-5" />

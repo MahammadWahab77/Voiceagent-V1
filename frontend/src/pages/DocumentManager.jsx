@@ -4,17 +4,25 @@ import { Plus, Trash, FileText } from 'lucide-react';
 
 export default function DocumentManager() {
     const [documents, setDocuments] = useState([]);
+    const [stages, setStages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [newContent, setNewContent] = useState('');
+    const [selectedStage, setSelectedStage] = useState('global');
     const [uploading, setUploading] = useState(false);
 
     useEffect(() => {
         fetchDocuments();
+        fetchStages();
     }, []);
+
+    const fetchStages = async () => {
+        const { data } = await supabase.from('stage_configs').select('stage_number, name').order('stage_number');
+        if (data) setStages(data);
+    };
 
     const fetchDocuments = async () => {
         setLoading(true);
-        const { data, error } = await supabase.from('document_embeddings').select('id, content, created_at').order('created_at', { ascending: false });
+        const { data, error } = await supabase.from('document_embeddings').select('*').order('created_at', { ascending: false });
         if (!error) setDocuments(data || []);
         setLoading(false);
     };
@@ -39,7 +47,10 @@ export default function DocumentManager() {
                 },
                 body: JSON.stringify({
                     content: newContent,
-                    metadata: { source: 'admin-upload' }
+                    metadata: {
+                        source: 'admin-upload',
+                        stage: selectedStage === 'global' ? null : parseInt(selectedStage)
+                    }
                 })
             });
 
@@ -66,6 +77,23 @@ export default function DocumentManager() {
 
             <div className="bg-white p-6 rounded shadow mb-8">
                 <h2 className="text-lg font-semibold mb-4">Add New Knowledge</h2>
+
+                <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Applicability</label>
+                    <select
+                        value={selectedStage}
+                        onChange={(e) => setSelectedStage(e.target.value)}
+                        className="w-full md:w-64 p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                    >
+                        <option value="global">Global (All Stages)</option>
+                        {stages.map(stage => (
+                            <option key={stage.stage_number} value={stage.stage_number}>
+                                Stage {stage.stage_number}: {stage.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 <textarea
                     className="w-full border p-3 rounded h-32 mb-4"
                     placeholder="Paste text content here to be embedded..."
@@ -86,15 +114,16 @@ export default function DocumentManager() {
                     <thead className="bg-gray-50 border-b">
                         <tr>
                             <th className="text-left p-4 text-gray-500 font-medium text-sm">Content Preview</th>
+                            <th className="text-left p-4 text-gray-500 font-medium text-sm">Scope</th>
                             <th className="text-left p-4 text-gray-500 font-medium text-sm">Created At</th>
                             <th className="text-right p-4 text-gray-500 font-medium text-sm">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan="3" className="p-4 text-center">Loading...</td></tr>
+                            <tr><td colSpan="4" className="p-4 text-center">Loading...</td></tr>
                         ) : documents.length === 0 ? (
-                            <tr><td colSpan="3" className="p-4 text-center text-gray-500">No documents found.</td></tr>
+                            <tr><td colSpan="4" className="p-4 text-center text-gray-500">No documents found.</td></tr>
                         ) : (
                             documents.map(doc => (
                                 <tr key={doc.id} className="border-b last:border-0 hover:bg-gray-50">
@@ -103,6 +132,17 @@ export default function DocumentManager() {
                                             <FileText className="w-5 h-5 text-gray-400" />
                                             <span className="line-clamp-1 max-w-md text-gray-700">{doc.content}</span>
                                         </div>
+                                    </td>
+                                    <td className="p-4 text-sm">
+                                        {doc.metadata?.stage ? (
+                                            <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs font-semibold">
+                                                Stage {doc.metadata.stage}
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs font-semibold">
+                                                Global
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="p-4 text-sm text-gray-500">
                                         {new Date(doc.created_at).toLocaleDateString()}

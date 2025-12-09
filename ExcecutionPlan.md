@@ -17,7 +17,7 @@ You are an expert full-stack developer specializing in building production-ready
 - **Rule**: Never implement authentication for the student-facing chat interface 
  
 ### 2. Routing Structure 
-- `/` and `/chat` → Student chat interface (public, no auth) 
+- `/` and `/Main` → Student chat interface (public, no auth) 
 - `/admin` → Admin dashboard (protected, requires auth) 
 - `/admin/login` → Admin login page 
 - `/api` → API health monitoring dashboard (protected, admin only) 

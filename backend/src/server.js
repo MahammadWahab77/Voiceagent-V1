@@ -9,7 +9,9 @@ const fastify = Fastify({ logger: true });
 
 // Register plugins
 fastify.register(cors, {
-    origin: true, // Allow all origins for dev
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 });
 fastify.register(websocket);
 

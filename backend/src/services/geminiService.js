@@ -1,5 +1,7 @@
 import WebSocket from 'ws';
 import { ragService } from './ragService.js';
+import { validationService } from './validationService.js';
+import { cache } from '../utils/cache.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
 export class GeminiLiveService {
@@ -14,8 +16,12 @@ export class GeminiLiveService {
         this.startTime = Date.now();
     }
 
-    connect() {
+    async connect() {
         console.log('Attempting to connect to Gemini with URL:', this.url.substring(0, 100) + '...');
+
+        // Load Stage Context First
+        await this.fetchStageContext();
+
         this.geminiWs = new WebSocket(this.url);
 
         this.geminiWs.on('open', () => {
@@ -79,40 +85,113 @@ export class GeminiLiveService {
         });
     }
 
+    async fetchStageContext() {
+        try {
+            console.log("Fetching stage context for student:", this.config.studentId);
+
+            // CACHE CHECKS
+            const cacheKeyGlobal = 'global_config:main';
+            let globalConfig = await cache.get(cacheKeyGlobal);
+
+            if (!globalConfig) {
+                const { data } = await supabaseAdmin
+                    .from('global_config')
+                    .select('global_system_prompt')
+                    .eq('key', 'main')
+                    .single();
+                globalConfig = data;
+                if (globalConfig) await cache.set(cacheKeyGlobal, globalConfig, 3600); // 1 hour
+            }
+
+            let currentStage = 1;
+            if (this.config.studentId) {
+                // We don't cache student current stage heavily as it changes often, 
+                // but we could cache it with short TTL if needed. For now verify from DB to be safe on state.
+                const { data: student } = await supabaseAdmin
+                    .from('students')
+                    .select('current_stage')
+                    .eq('id', this.config.studentId)
+                    .single();
+                currentStage = student?.current_stage || 1;
+            }
+
+            const cacheKeyStage = `stage_config:${currentStage}`;
+            let stageConfig = await cache.get(cacheKeyStage);
+
+            if (!stageConfig) {
+                const { data } = await supabaseAdmin
+                    .from('stage_configs')
+                    .select('*')
+                    .eq('stage_number', currentStage)
+                    .single();
+                stageConfig = data;
+                if (stageConfig) await cache.set(cacheKeyStage, stageConfig, 3600); // 1 hour
+            }
+
+            this.currentStageData = stageConfig;
+
+            // 4. Combine Prompts
+            const globalPrompt = globalConfig?.global_system_prompt || "You are a helpful assistant.";
+            const stagePrompt = stageConfig?.system_prompt || "Greet the student.";
+
+            this.systemInstruction = `${globalPrompt}\n\nCURRENT STAGE (${stageConfig?.name || 'Intro'}):\n${stagePrompt}\n\nOnce the student has satisfied all these points, you MUST call the "complete_stage" tool to advance them to the next stage. Do not just say you are moving on, you must call the tool.`;
+            console.log("System Instruction Prepared");
+
+        } catch (error) {
+            console.error("Error fetching stage context:", error);
+            this.systemInstruction = "You are a helpful assistant.";
+            this.currentStageData = { stage_number: 1 };
+        }
+    }
+
     sendInitialSetup() {
+        const systemInstruction = this.systemInstruction || "You are a helpful assistant.";
+
         const setupMessage = {
             setup: {
                 model: this.model,
+                system_instruction: { parts: [{ text: systemInstruction }] },
                 tools: [
                     {
                         function_declarations: [
                             {
                                 name: "retrieve_knowledge",
                                 description: "Retrieve knowledge from the database to answer student questions.",
+                                parameters: { type: "OBJECT", properties: { query: { type: "STRING", description: "The search query to find relevant information." } }, required: ["query"] }
+                            },
+                            {
+                                name: "complete_stage",
+                                description: "Call this function ONLY when the student has satisfied all validation questions for the current stage and is ready to move to the next stage.",
+                                parameters: { type: "OBJECT", properties: { summary: { type: "STRING", description: "A brief summary of what the student agreed to or answered in this stage." } }, required: ["summary"] }
+                            },
+                            {
+                                name: "handlePaymentSelection",
+                                description: "Trigger human handoff when user selects Full Payment or Credit Card options.",
                                 parameters: {
                                     type: "OBJECT",
                                     properties: {
-                                        query: {
+                                        method: {
                                             type: "STRING",
-                                            description: "The search query to find relevant information."
+                                            description: "The payment method selected (e.g. 'Full Payment', 'Credit Card')"
                                         }
                                     },
-                                    required: ["query"]
+                                    required: ["method"]
                                 }
                             }
                         ]
                     }
                 ],
-                generation_config: {
-                    response_modalities: ["AUDIO"]
-                }
+                generation_config: { response_modalities: ["AUDIO"] }
             }
         };
-        this.geminiWs.send(JSON.stringify(setupMessage));
+        if (this.geminiWs && this.geminiWs.readyState === WebSocket.OPEN) {
+            this.geminiWs.send(JSON.stringify(setupMessage));
+        } else {
+            console.error("Gemini WS not open, cannot send setup");
+        }
     }
 
     async handleGeminiMessage(message) {
-        // 1. Tool Call
         if (message.toolCall) {
             const functionCalls = message.toolCall.functionCalls;
             if (functionCalls) {
@@ -121,44 +200,59 @@ export class GeminiLiveService {
                         const query = call.args.query;
                         console.log(`Tool Call: Retrieve Knowledge for "${query}"`);
 
-                        const context = await ragService.retrieveContext(query);
+                        const currentStage = this.currentStageData?.stage_number;
+                        const context = await ragService.retrieveContext(query, currentStage);
 
-                        // Log RAG usage
-                        await this.logConversation({
-                            message: `[RAG Query]: ${query}`,
-                            response: `[RAG Context]: ${context.substring(0, 100)}...`,
-                            stage: 0 // Default stage for now
-                        });
-
-                        const toolResponse = {
-                            tool_response: {
-                                function_responses: [
-                                    {
-                                        name: "retrieve_knowledge",
-                                        id: call.id,
-                                        response: { result: context }
-                                    }
-                                ]
-                            }
-                        };
-                        this.geminiWs.send(JSON.stringify(toolResponse));
+                        this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "retrieve_knowledge", id: call.id, response: { result: context } }] } }));
+                    }
+                    if (call.name === 'complete_stage') {
+                        console.log(`Tool Call: Stage Completed! Summary: ${call.args.summary} `);
+                        const success = await this.handleStageCompletion(call.args.summary);
+                        const resultMsg = success ? "Stage marked as complete." : "Stage completion failed: Summary did not meet validation criteria.";
+                        this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "complete_stage", id: call.id, response: { result: resultMsg } }] } }));
+                    }
+                    if (call.name === 'handlePaymentSelection') {
+                        console.log(`Tool Call: Handoff for ${call.args.method}`);
+                        if (this.clientWs.readyState === WebSocket.OPEN) {
+                            this.clientWs.send(JSON.stringify({ type: "HANDOFF_INITIATED", method: call.args.method }));
+                        }
+                        this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "handlePaymentSelection", id: call.id, response: { result: "Handoff Initiated" } }] } }));
                     }
                 }
             }
         }
-
-        // 2. Audio/Text Content
         if (message.serverContent) {
-            // Forward to client
-            this.clientWs.send(JSON.stringify(message));
-
-            // Basic logging of model turn
-            // Note: Real logging of audio content is hard, so we just log specific text/json events or just presence of turn
-            // Ensure we don't spam DB with every chunk
-            if (message.serverContent.modelTurn && message.serverContent.turnComplete) {
-                // Turn complete - good place to log connection health/stats
+            // Optional: Message Validation (Logging for now)
+            if (message.serverContent.modelTurn && message.serverContent.modelTurn.parts) {
+                for (const part of message.serverContent.modelTurn.parts) {
+                    if (part.text) {
+                        const isValid = validationService.validateResponse(part.text, this.currentStageData);
+                        if (!isValid) console.warn("⚠️ AI Response failed validation:", part.text);
+                    }
+                }
             }
+            this.clientWs.send(JSON.stringify(message));
         }
+    }
+
+    async handleStageCompletion(summary) {
+        if (!this.config.studentId || !this.currentStageData) return false;
+
+        // Validation
+        if (!validationService.validateStageCompletion(summary, this.currentStageData)) {
+            console.warn("❌ Stage completion validation failed for summary:", summary);
+            return false;
+        }
+
+        const currentStageNum = this.currentStageData.stage_number;
+        const nextStageNum = currentStageNum + 1;
+        console.log(`Moving student ${this.config.studentId} to Stage ${nextStageNum} `);
+        await supabaseAdmin.from('students').update({ current_stage: nextStageNum }).eq('id', this.config.studentId);
+        if (this.clientWs.readyState === WebSocket.OPEN) {
+            this.clientWs.send(JSON.stringify({ type: "STAGE_UPDATE", newStage: nextStageNum, stageName: "Next Stage" }));
+        }
+        await this.logConversation({ message: "SYSTEM: Stage Completed", response: summary, stage: currentStageNum });
+        return true;
     }
 
     async logConversation({ message, response, stage }) {

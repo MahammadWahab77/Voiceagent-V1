@@ -50,14 +50,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, liveData, onLogout }
         if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 
         setTimeout(() => {
+            // In production, redirect to Stripe/Payment Provider
+            window.location.href = "https://example.com/checkout"; // Placeholder
             handleEndSession();
-        }, 5000);
+        }, 3000);
     };
 
     const handleEndSession = () => {
         disconnect();
         onLogout();
     };
+
+
 
     const handleDismissGuidelines = () => {
         setShowGuidelines(false);
@@ -304,15 +308,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, liveData, onLogout }
             {showHandoffPopup && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fadeIn">
                     <div className="bg-white rounded-3xl p-8 w-80 text-center shadow-2xl animate-[pulse-glow_2s_infinite]">
-                        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-600">
+                        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
                             <Headphones className="w-10 h-10 animate-bounce" />
                         </div>
-                        <h3 className="text-xl font-bold mb-2">Connecting Listener</h3>
-                        <p className="text-slate-500 text-sm mb-6">Please wait while we transfer you to a human expert...</p>
+                        <h3 className="text-xl font-bold mb-2">Proceeding to Payment</h3>
+                        <p className="text-slate-500 text-sm mb-6">Redirecting you to the secure payment gateway...</p>
                         <div className="flex justify-center gap-1">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-0" />
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-100" />
-                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce delay-200" />
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-0" />
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-100" />
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-200" />
                         </div>
                     </div>
                 </div>

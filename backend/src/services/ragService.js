@@ -37,14 +37,14 @@ export const ragService = {
         }
     },
 
-    async retrieveContext(query) {
+    async retrieveContext(query, stage = null) {
         try {
             const embedding = await this.embedText(query);
 
             const { data, error } = await supabaseAdmin.rpc('match_documents', {
                 query_embedding: embedding,
                 match_threshold: 0.5,
-                match_count: 3
+                match_count: 15 // Increase count to allow for filtering
             });
 
             if (error) {
@@ -52,8 +52,21 @@ export const ragService = {
                 return "";
             }
 
-            // data is Array<{ content: string }>
-            return data.map(doc => doc.content).join("\n\n");
+            // data is Array<{ content: string, metadata: object }>
+            // Filter: Keep if global (no stage in metadata) OR matching specific stage
+            const filteredData = data.filter(doc => {
+                const docStage = doc.metadata?.stage;
+                // If doc has no stage defined, it's global -> Keep
+                // If doc has stage, it must match requested stage -> Keep
+                // If requested stage is null/undefined, we only keep global docs
+                if (!docStage) return true;
+                return stage && parseInt(docStage) === parseInt(stage);
+            });
+
+            // Take top 3 after filtering
+            const topResults = filteredData.slice(0, 3);
+
+            return topResults.map(doc => doc.content).join("\n\n");
         } catch (error) {
             console.error("RAG Retrieval Error:", error);
             return "";
