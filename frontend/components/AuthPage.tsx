@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User } from '../types';
+import { User } from '../src/types';
 import { ArrowRight, User as UserIcon, Phone } from 'lucide-react';
 
 interface AuthPageProps {
@@ -18,7 +18,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onConnect }) => {
       setError('Please fill in all fields');
       return;
     }
-    
+
     // Haptic feedback for login
     if (navigator.vibrate) navigator.vibrate(10);
 
@@ -26,13 +26,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onConnect }) => {
 
     // Trigger connection immediately with user details
     onConnect(user);
-    
+
     onLogin(user);
   };
 
   return (
     <div className="relative w-full h-screen bg-white flex flex-col items-center justify-center overflow-hidden font-sans">
-      
+
       {/* Background Ambience */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-[20%] -right-[10%] w-[800px] h-[800px] bg-[#C9F0FF] rounded-full mix-blend-multiply filter blur-[80px] opacity-40 animate-[float-slow_20s_infinite_reverse]" />
@@ -42,12 +42,12 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onConnect }) => {
       {/* Login Card */}
       <div className="relative z-10 w-full max-w-md p-8">
         <div className="bg-white/40 backdrop-blur-xl rounded-[32px] border border-white/60 shadow-xl p-8 md:p-10">
-          
+
           <div className="text-center mb-10">
             <div className="flex justify-center mb-6">
-              <img 
-                src="https://d14qv6cm1t62pm.cloudfront.net/logos/Nxtwave_90_48.png?q=80&auto=format%2C+compress" 
-                alt="NxtWave" 
+              <img
+                src="https://d14qv6cm1t62pm.cloudfront.net/logos/Nxtwave_90_48.png?q=80&auto=format%2C+compress"
+                alt="NxtWave"
                 className="h-10 w-auto object-contain"
               />
             </div>
@@ -111,7 +111,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onConnect }) => {
             </button>
           </form>
         </div>
-        
+
         <div className="text-center mt-6">
           <p className="text-xs text-gray-400">Voice AI Onboarding System v1.0</p>
         </div>
