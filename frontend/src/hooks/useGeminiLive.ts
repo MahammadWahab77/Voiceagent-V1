@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TranscriptItem, UseGeminiLiveReturn } from '../types';
 
-const URL = 'ws://localhost:3001/ws/chat';
+const URL = import.meta.env.VITE_BACKEND_WS_URL || 'ws://127.0.0.1:3001/ws/chat';
 
 export function useGeminiLive(): UseGeminiLiveReturn {
     const [isConnected, setIsConnected] = useState(false);
@@ -9,6 +9,9 @@ export function useGeminiLive(): UseGeminiLiveReturn {
     const [isRecording, setIsRecording] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [isHandoff, setIsHandoff] = useState(false);
+    const [handoffReason, setHandoffReason] = useState<string | null>(null);
+    const [currentStage, setCurrentStage] = useState<number>(1);
+    const [stageName, setStageName] = useState<string>('Welcome');
     const [error, setError] = useState<string | null>(null);
     const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
 
@@ -21,7 +24,7 @@ export function useGeminiLive(): UseGeminiLiveReturn {
 
     const websocketRef = useRef<WebSocket | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
-    const audioWorkletNodeRef = useRef<ScriptProcessorNode | null>(null);
+    const audioWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
 
     // Audio Queue
     const audioQueueRef = useRef<Float32Array[]>([]);
@@ -106,9 +109,16 @@ export function useGeminiLive(): UseGeminiLiveReturn {
                     }
                 }
 
-                // Check for handoff trigger (backend specific)
-                if (data.toolCall?.functionCalls?.some((f: any) => f.name === 'transfer_to_agent')) {
+                // Handle handoff trigger from backend
+                if (data.type === 'HANDOFF_INITIATED') {
                     setIsHandoff(true);
+                    setHandoffReason(data.reason || data.method || 'Handoff requested');
+                }
+
+                // Handle stage updates from backend
+                if (data.type === 'STAGE_UPDATE') {
+                    setCurrentStage(data.newStage);
+                    setStageName(data.stageName || `Stage ${data.newStage}`);
                 }
 
             } catch (e) {
@@ -180,33 +190,38 @@ export function useGeminiLive(): UseGeminiLiveReturn {
             inputAnalyserRef.current = analyser;
             setInputAnalyser(analyser);
 
-            const processor = ctx.createScriptProcessor(4096, 1, 1);
+            // Load AudioWorklet module
+            await ctx.audioWorklet.addModule('/audio-processor.js');
 
-            source.connect(analyser);
-            analyser.connect(processor);
-            processor.connect(ctx.destination);
+            // Create AudioWorkletNode
+            const workletNode = new AudioWorkletNode(ctx, 'audio-processor');
 
-            processor.onaudioprocess = (e) => {
-                if (!websocketRef.current || isMuted) return;
+            // Handle messages from the worklet
+            workletNode.port.onmessage = (event) => {
+                if (event.data.type === 'audio' && websocketRef.current && !isMuted) {
+                    const inputData = event.data.audioData;
 
-                const inputData = e.inputBuffer.getChannelData(0);
+                    // Convert and send
+                    const pcm16 = floatTo16BitPCM(inputData);
+                    const base64Audio = arrayBufferToBase64(pcm16);
 
-                // Convert and send
-                const pcm16 = floatTo16BitPCM(inputData);
-                const base64Audio = arrayBufferToBase64(pcm16);
+                    const msg = {
+                        realtime_input: {
+                            media_chunks: [{ mime_type: "audio/pcm", data: base64Audio }]
+                        }
+                    };
 
-                const msg = {
-                    realtime_input: {
-                        media_chunks: [{ mime_type: "audio/pcm", data: base64Audio }]
+                    if (websocketRef.current.readyState === WebSocket.OPEN) {
+                        websocketRef.current.send(JSON.stringify(msg));
                     }
-                };
-
-                if (websocketRef.current.readyState === WebSocket.OPEN) {
-                    websocketRef.current.send(JSON.stringify(msg));
                 }
             };
 
-            audioWorkletNodeRef.current = processor;
+            source.connect(analyser);
+            analyser.connect(workletNode);
+            workletNode.connect(ctx.destination);
+
+            audioWorkletNodeRef.current = workletNode as any;
             setIsRecording(true);
 
         } catch (err) {
@@ -252,6 +267,9 @@ export function useGeminiLive(): UseGeminiLiveReturn {
         isRecording,
         isMuted,
         isHandoff,
+        handoffReason,
+        currentStage,
+        stageName,
         error,
         connect,
         disconnect,

@@ -17,15 +17,23 @@ fastify.register(websocket);
 
 // Register Routes
 fastify.register(async function (fastify) {
-    fastify.get('/ws/chat', { websocket: true }, (connection, req) => {
+    // In @fastify/websocket v11, handler receives (socket, request) directly
+    fastify.get('/ws/chat', { websocket: true }, (socket, req) => {
         console.log('Client connected to /ws/chat');
 
         // Extract studentId from query params
         const { studentId } = req.query;
 
         // Initialize Gemini Service for this connection
-        const geminiService = new GeminiLiveService(connection.socket, { studentId });
-        geminiService.connect();
+        const geminiService = new GeminiLiveService(socket, { studentId });
+
+        // Connect with proper error handling
+        geminiService.connect().catch(err => {
+            console.error('❌ Failed to connect to Gemini:', err.message);
+            if (socket.readyState === 1) { // WebSocket.OPEN
+                socket.close(1011, 'Internal server error');
+            }
+        });
     });
 });
 

@@ -177,6 +177,42 @@ export class GeminiLiveService {
                                     },
                                     required: ["method"]
                                 }
+                            },
+                            {
+                                name: "update_stage",
+                                description: "Move the student to a specific stage number. Use this to navigate forwards or backwards between conversation stages.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        stage_number: { type: "NUMBER", description: "The stage number to move to (1-based)" },
+                                        reason: { type: "STRING", description: "Brief reason for the stage change" }
+                                    },
+                                    required: ["stage_number"]
+                                }
+                            },
+                            {
+                                name: "trigger_handoff",
+                                description: "Escalate the conversation to a human agent. Call this when the student needs human assistance or requests to speak with a person.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        reason: { type: "STRING", description: "Why the handoff is being triggered (e.g., 'User requested human agent', 'Complex payment query')" }
+                                    },
+                                    required: ["reason"]
+                                }
+                            },
+                            {
+                                name: "log_interaction",
+                                description: "Log key business data points from the conversation such as user preferences, hesitations, or decisions.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        sentiment: { type: "STRING", description: "User sentiment: 'positive', 'neutral', 'negative', or 'hesitant'" },
+                                        summary: { type: "STRING", description: "Key insight or data point (e.g., 'User prefers 0% EMI', 'User is hesitant about CIBIL')" },
+                                        category: { type: "STRING", description: "Category: 'preference', 'objection', 'decision', 'question'" }
+                                    },
+                                    required: ["sentiment", "summary"]
+                                }
                             }
                         ]
                     }
@@ -218,6 +254,21 @@ export class GeminiLiveService {
                         }
                         this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "handlePaymentSelection", id: call.id, response: { result: "Handoff Initiated" } }] } }));
                     }
+                    if (call.name === 'update_stage') {
+                        console.log(`Tool Call: Update Stage to ${call.args.stage_number}`);
+                        const result = await this.handleUpdateStage(call.args.stage_number, call.args.reason);
+                        this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "update_stage", id: call.id, response: { result } }] } }));
+                    }
+                    if (call.name === 'trigger_handoff') {
+                        console.log(`Tool Call: Trigger Handoff - ${call.args.reason}`);
+                        const result = await this.handleTriggerHandoff(call.args.reason);
+                        this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "trigger_handoff", id: call.id, response: { result } }] } }));
+                    }
+                    if (call.name === 'log_interaction') {
+                        console.log(`Tool Call: Log Interaction - [${call.args.sentiment}] ${call.args.summary}`);
+                        const result = await this.handleLogInteraction(call.args.sentiment, call.args.summary, call.args.category);
+                        this.geminiWs.send(JSON.stringify({ tool_response: { function_responses: [{ name: "log_interaction", id: call.id, response: { result } }] } }));
+                    }
                 }
             }
         }
@@ -253,6 +304,97 @@ export class GeminiLiveService {
         }
         await this.logConversation({ message: "SYSTEM: Stage Completed", response: summary, stage: currentStageNum });
         return true;
+    }
+
+    // Handle update_stage tool call - move to any specific stage
+    async handleUpdateStage(stageNumber, reason) {
+        if (!this.config.studentId) return { success: false, error: "No student ID" };
+
+        // Validate stage exists
+        const { data: stage, error: stageError } = await supabaseAdmin
+            .from('stage_configs')
+            .select('stage_number, name')
+            .eq('stage_number', stageNumber)
+            .single();
+
+        if (stageError || !stage) {
+            console.warn(`❌ Stage ${stageNumber} not found`);
+            return { success: false, error: `Stage ${stageNumber} not found` };
+        }
+
+        // Update student's current stage
+        await supabaseAdmin
+            .from('students')
+            .update({ current_stage: stageNumber })
+            .eq('id', this.config.studentId);
+
+        console.log(`📍 Moved student ${this.config.studentId} to Stage ${stageNumber} (${stage.name})`);
+
+        // Notify frontend
+        if (this.clientWs.readyState === WebSocket.OPEN) {
+            this.clientWs.send(JSON.stringify({
+                type: "STAGE_UPDATE",
+                newStage: stageNumber,
+                stageName: stage.name,
+                reason: reason || "Stage navigation"
+            }));
+        }
+
+        // Reload stage context for the agent
+        await this.fetchStageContext();
+
+        return { success: true, newStage: stageNumber, stageName: stage.name };
+    }
+
+    // Handle trigger_handoff tool call - escalate to human agent
+    async handleTriggerHandoff(reason) {
+        console.log(`🤝 Handoff triggered: ${reason}`);
+
+        // Log handoff event to interaction_insights
+        try {
+            await supabaseAdmin.from('interaction_insights').insert({
+                student_id: this.config.studentId,
+                insight_type: 'handoff',
+                sentiment: 'neutral',
+                summary: reason,
+                stage: this.currentStageData?.stage_number || 1
+            });
+        } catch (err) {
+            // Table might not exist yet, log but don't fail
+            console.warn('Could not log handoff insight:', err.message);
+        }
+
+        // Notify frontend
+        if (this.clientWs.readyState === WebSocket.OPEN) {
+            this.clientWs.send(JSON.stringify({
+                type: "HANDOFF_INITIATED",
+                reason
+            }));
+        }
+
+        return { success: true, message: "Handoff initiated" };
+    }
+
+    // Handle log_interaction tool call - log business insights
+    async handleLogInteraction(sentiment, summary, category) {
+        if (!this.config.studentId) return { success: false, error: "No student ID" };
+
+        try {
+            await supabaseAdmin.from('interaction_insights').insert({
+                student_id: this.config.studentId,
+                insight_type: category || 'general',
+                sentiment: sentiment,
+                summary: summary,
+                stage: this.currentStageData?.stage_number || 1
+            });
+
+            console.log(`📊 Logged insight: [${sentiment}] ${summary}`);
+            return { success: true };
+        } catch (err) {
+            // Table might not exist yet, log but don't fail
+            console.warn('Could not log interaction insight:', err.message);
+            return { success: false, error: err.message };
+        }
     }
 
     async logConversation({ message, response, stage }) {

@@ -39,6 +39,9 @@ export interface UseGeminiLiveReturn {
     isRecording: boolean;
     isMuted: boolean;
     isHandoff: boolean;
+    handoffReason: string | null;
+    currentStage: number;
+    stageName: string;
     error: string | null;
     connect: (studentId?: string) => void;
     disconnect: () => void;
