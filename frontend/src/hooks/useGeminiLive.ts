@@ -1,7 +1,19 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TranscriptItem, UseGeminiLiveReturn } from '../types';
 
-const URL = import.meta.env.VITE_BACKEND_WS_URL || 'ws://127.0.0.1:3001/ws/chat';
+// Helper to auto-derive WS URL from Backend URL
+const getWsUrl = () => {
+    const wsEnv = import.meta.env.VITE_BACKEND_WS_URL;
+    if (wsEnv) return wsEnv;
+
+    const httpUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const isSecure = httpUrl.startsWith('https');
+    const wsProtocol = isSecure ? 'wss' : 'ws';
+    const domain = httpUrl.replace(/^https?:\/\//, '');
+    return `${wsProtocol}://${domain}/ws/chat`;
+};
+
+const URL = getWsUrl();
 
 export function useGeminiLive(): UseGeminiLiveReturn {
     const [isConnected, setIsConnected] = useState(false);
