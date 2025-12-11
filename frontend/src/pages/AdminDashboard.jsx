@@ -18,7 +18,7 @@ export default function AdminDashboard() {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
 
-            const response = await fetch('http://localhost:3001/api/admin/analytics', {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/admin/analytics`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

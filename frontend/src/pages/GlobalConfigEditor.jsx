@@ -21,7 +21,7 @@ export default function GlobalConfigEditor() {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
 
-            const response = await fetch('http://localhost:3001/api/admin/global-config', {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/admin/global-config`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -54,7 +54,7 @@ export default function GlobalConfigEditor() {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
 
-            const response = await fetch('http://localhost:3001/api/admin/global-config', {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/admin/global-config`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

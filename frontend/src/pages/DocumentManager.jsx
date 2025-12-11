@@ -39,7 +39,7 @@ export default function DocumentManager() {
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error("Not authenticated");
 
-            const res = await fetch('http://localhost:3001/api/admin/documents', {
+            const res = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/admin/documents`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

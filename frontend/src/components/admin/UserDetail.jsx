@@ -23,7 +23,7 @@ export default function UserDetail() {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
             const headers = { 'Authorization': `Bearer ${token}` };
-            const baseUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+            const baseUrl = import.meta.env.VITE_BACKEND_URL || '';
 
             // Fetch User & Analytics
             const userRes = await fetch(`${baseUrl}/api/admin/users/${userId}`, { headers });

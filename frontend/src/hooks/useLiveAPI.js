@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-const URL = 'ws://localhost:3001/ws/chat';
+const getWsUrl = () => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+    if (backendUrl) {
+        return backendUrl.replace(/^http/, 'ws') + '/ws/chat';
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/chat`;
+};
+const URL = getWsUrl();
 
 export function useLiveAPI() {
     const [connected, setConnected] = useState(false);

@@ -17,7 +17,7 @@ export default function UserList() {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
 
-            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/admin/users`, {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/admin/users`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }

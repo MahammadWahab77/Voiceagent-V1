@@ -1,16 +1,22 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TranscriptItem, UseGeminiLiveReturn } from '../types';
 
-// Helper to auto-derive WS URL from Backend URL
+// Helper to auto-derive WS URL from current location
 const getWsUrl = () => {
     const wsEnv = import.meta.env.VITE_BACKEND_WS_URL;
     if (wsEnv) return wsEnv;
 
-    const httpUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-    const isSecure = httpUrl.startsWith('https');
-    const wsProtocol = isSecure ? 'wss' : 'ws';
-    const domain = httpUrl.replace(/^https?:\/\//, '');
-    return `${wsProtocol}://${domain}/ws/chat`;
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    if (backendUrl) {
+        const isSecure = backendUrl.startsWith('https');
+        const wsProtocol = isSecure ? 'wss' : 'ws';
+        const domain = backendUrl.replace(/^https?:\/\//, '');
+        return `${wsProtocol}://${domain}/ws/chat`;
+    }
+    
+    // Use current location for proxied requests
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/chat`;
 };
 
 const URL = getWsUrl();
