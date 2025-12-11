@@ -7,6 +7,9 @@ import StageManager from './pages/StageManager';
 import GlobalConfigEditor from './pages/GlobalConfigEditor';
 import DocumentManager from './pages/DocumentManager';
 
+import UserList from './components/admin/UserList';
+import UserDetail from './components/admin/UserDetail';
+
 function App() {
     return (
         <BrowserRouter>
@@ -17,6 +20,8 @@ function App() {
                 <Route path="/admin/login" element={<AdminLogin />} />
                 <Route path="/admin" element={<AdminLayout />}>
                     <Route index element={<AdminDashboard />} />
+                    <Route path="users" element={<UserList />} />
+                    <Route path="users/:userId" element={<UserDetail />} />
                     <Route path="stages" element={<StageManager />} />
                     <Route path="global-config" element={<GlobalConfigEditor />} />
                     <Route path="documents" element={<DocumentManager />} />

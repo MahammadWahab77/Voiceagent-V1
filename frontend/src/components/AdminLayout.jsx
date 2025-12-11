@@ -56,6 +56,10 @@ export default function AdminLayout() {
                         <Globe className="w-5 h-5" />
                         <span>Global Config</span>
                     </Link>
+                    <Link to="/admin/users" className="flex items-center space-x-3 px-4 py-3 hover:bg-indigo-700 rounded-lg transition">
+                        <Users className="w-5 h-5" />
+                        <span>Users</span>
+                    </Link>
                     <Link to="/admin/documents" className="flex items-center space-x-3 px-4 py-3 hover:bg-indigo-700 rounded-lg transition">
                         <FileText className="w-5 h-5" />
                         <span>Documents (RAG)</span>

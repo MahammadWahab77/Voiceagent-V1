@@ -91,4 +91,63 @@ export default async function adminRoutes(fastify, options) {
         if (error) return reply.code(500).send(error);
         return data;
     });
+
+    // USERS MANAGEMENT
+    fastify.get('/users', { preHandler: requireAuth }, async (req, reply) => {
+        // Fetch users with their latest analytics if possible, or just raw students table
+        const { data, error } = await supabaseAdmin
+            .from('students')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) return reply.code(500).send(error);
+        return data;
+    });
+
+    fastify.get('/users/:id', { preHandler: requireAuth }, async (req, reply) => {
+        const { id } = req.params;
+
+        // Parallel fetch for student details and analytics
+        const [studentRes, analyticsRes] = await Promise.all([
+            supabaseAdmin.from('students').select('*').eq('id', id).single(),
+            supabaseAdmin.from('student_analytics').select('*').eq('student_id', id).single()
+        ]);
+
+        if (studentRes.error) return reply.code(500).send(studentRes.error);
+
+        return {
+            student: studentRes.data,
+            analytics: analyticsRes.data || null
+        };
+    });
+
+    fastify.get('/users/:id/conversations', { preHandler: requireAuth }, async (req, reply) => {
+        const { id } = req.params;
+        const { data, error } = await supabaseAdmin
+            .from('conversations')
+            .select('*')
+            .eq('student_id', id)
+            .order('created_at', { ascending: true });
+
+        if (error) return reply.code(500).send(error);
+        return data;
+    });
+
+    fastify.get('/users/:id/insights', { preHandler: requireAuth }, async (req, reply) => {
+        const { id } = req.params;
+        // Check if table exists first/handle gracefully or ensure migration run?
+        // Assuming table exists as per plan
+        const { data, error } = await supabaseAdmin
+            .from('interaction_insights')
+            .select('*')
+            .eq('student_id', id)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            // If table doesn't exist, return empty array instead of 500 might be safer if migration not guaranteed
+            // But for now, returning error to help debug
+            return reply.code(500).send(error);
+        }
+        return data;
+    });
 }
