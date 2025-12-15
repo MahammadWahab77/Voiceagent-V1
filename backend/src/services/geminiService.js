@@ -89,35 +89,35 @@ export class GeminiLiveService {
         try {
             console.log("Fetching stage context for student:", this.config.studentId);
 
-            // CACHE CHECKS
+            // Fetch Global Config and Student Data in Parallel
             const cacheKeyGlobal = 'global_config:main';
-            let globalConfig = await cache.get(cacheKeyGlobal);
 
-            if (!globalConfig) {
-                const { data } = await supabaseAdmin
-                    .from('global_config')
-                    .select('global_system_prompt')
-                    .eq('key', 'main')
-                    .single();
-                globalConfig = data;
-                if (globalConfig) await cache.set(cacheKeyGlobal, globalConfig, 3600); // 1 hour
-            }
+            const [globalConfig, studentData] = await Promise.all([
+                cache.get(cacheKeyGlobal).then(async (val) => {
+                    if (val) return val;
+                    const { data } = await supabaseAdmin
+                        .from('global_config')
+                        .select('global_system_prompt')
+                        .eq('key', 'main')
+                        .single();
+                    if (data) await cache.set(cacheKeyGlobal, data, 3600);
+                    return data;
+                }),
+                (async () => {
+                    if (!this.config.studentId) return { current_stage: 1 };
+                    const { data } = await supabaseAdmin
+                        .from('students')
+                        .select('current_stage')
+                        .eq('id', this.config.studentId)
+                        .single();
+                    return data || { current_stage: 1 };
+                })()
+            ]);
 
-            let currentStage = 1;
-            if (this.config.studentId) {
-                // We don't cache student current stage heavily as it changes often, 
-                // but we could cache it with short TTL if needed. For now verify from DB to be safe on state.
-                const { data: student } = await supabaseAdmin
-                    .from('students')
-                    .select('current_stage')
-                    .eq('id', this.config.studentId)
-                    .single();
-                currentStage = student?.current_stage || 1;
-            }
-
+            const currentStage = studentData.current_stage || 1;
             const cacheKeyStage = `stage_config:${currentStage}`;
-            let stageConfig = await cache.get(cacheKeyStage);
 
+            let stageConfig = await cache.get(cacheKeyStage);
             if (!stageConfig) {
                 const { data } = await supabaseAdmin
                     .from('stage_configs')
@@ -125,7 +125,7 @@ export class GeminiLiveService {
                     .eq('stage_number', currentStage)
                     .single();
                 stageConfig = data;
-                if (stageConfig) await cache.set(cacheKeyStage, stageConfig, 3600); // 1 hour
+                if (stageConfig) await cache.set(cacheKeyStage, stageConfig, 3600);
             }
 
             this.currentStageData = stageConfig;
