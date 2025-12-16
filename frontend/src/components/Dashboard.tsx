@@ -65,7 +65,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, liveData, onLogout }
 
     const handleDismissGuidelines = () => {
         setShowGuidelines(false);
-        // Auto-connect if ready logic desired, or just wait for user
+        // Auto-connect after user confirms readiness
+        connect(user);
     };
 
     const handleRetryConnection = () => {
