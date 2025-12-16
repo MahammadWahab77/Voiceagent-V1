@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TranscriptItem, UseGeminiLiveReturn } from '../types';
+import { base64ToFloat32Array, float32ToPCM16, arrayBufferToBase64 } from '../../utils/audioUtils';
 
 // Helper to auto-derive WS URL from current location
 const getWsUrl = () => {
@@ -220,12 +221,12 @@ export function useGeminiLive(): UseGeminiLiveReturn {
                     const inputData = event.data.audioData;
 
                     // Convert and send
-                    const pcm16 = floatTo16BitPCM(inputData);
+                    const pcm16 = float32ToPCM16(inputData);
                     const base64Audio = arrayBufferToBase64(pcm16);
 
                     const msg = {
                         realtime_input: {
-                            media_chunks: [{ mime_type: "audio/pcm", data: base64Audio }]
+                            media_chunks: [{ mime_type: "audio/pcm;rate=16000", data: base64Audio }]
                         }
                     };
 
@@ -296,39 +297,4 @@ export function useGeminiLive(): UseGeminiLiveReturn {
         inputAnalyser,
         transcripts
     };
-}
-
-// Helpers
-function floatTo16BitPCM(output: Float32Array) {
-    const result = new Int16Array(output.length);
-    for (let i = 0; i < output.length; i++) {
-        const s = Math.max(-1, Math.min(1, output[i]));
-        result[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    return result.buffer;
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-}
-
-function base64ToFloat32Array(base64: string) {
-    const binaryString = window.atob(base64);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-    }
-    const int16 = new Int16Array(bytes.buffer);
-    const float32 = new Float32Array(int16.length);
-    for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 32768.0;
-    }
-    return float32;
 }
