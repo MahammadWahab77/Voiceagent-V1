@@ -28,6 +28,7 @@ export class GeminiLiveService {
             console.log('✅ Connected to Gemini Live API');
             this.isConnected = true;
             this.sendInitialSetup();
+            this.sendWelcomeTrigger();
         });
 
         this.geminiWs.on('message', async (data) => {
@@ -141,6 +142,22 @@ export class GeminiLiveService {
             console.error("Error fetching stage context:", error);
             this.systemInstruction = "You are a helpful assistant.";
             this.currentStageData = { stage_number: 1 };
+        }
+    }
+
+    sendWelcomeTrigger() {
+        console.log("Sending welcome trigger to Gemini...");
+        const msg = {
+            client_content: {
+                turns: [{
+                    role: "user",
+                    parts: [{ text: "The user has joined the session. Please greet them warmly and introduce yourself as Maya. Do not wait for them to speak." }]
+                }],
+                turn_complete: true
+            }
+        };
+        if (this.geminiWs && this.geminiWs.readyState === WebSocket.OPEN) {
+            this.geminiWs.send(JSON.stringify(msg));
         }
     }
 
